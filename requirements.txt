@@ -1,10 +1,6 @@
-pandas
-scikit-learn
-joblib
 fastapi
 uvicorn[standard]
 streamlit
-requests
 anyio==4.14.2
 appnope==0.1.4
 argon2-cffi==25.1.0
