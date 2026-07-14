@@ -1,0 +1,32 @@
+How to run the Berlin Property Intelligence price predictor
+=============================================================
+
+Run all commands from the project root:
+/home/fabian/code/MarieKatha/berlin-property-intelligence
+
+Make sure the "berlin-property" pyenv env is active (it's the default for
+this directory via .python-version). If commands aren't found, use the
+full path instead, e.g. /home/fabian/.pyenv/versions/berlin-property/bin/uvicorn
+
+1. (One-time, or after retraining) Train the model:
+
+   python api/train.py
+
+   This reads raw_data/secondary_sales.csv, fits a linear regression of
+   price_eur on area_m2, and saves it to api/model.pkl.
+
+2. Start the API (terminal 1):
+
+   uvicorn api.main:app --port 8000
+
+   - Visit http://127.0.0.1:8000/ in a browser for a welcome page with a
+     link to a sample prediction.
+   - Or query directly, e.g.:
+     curl "http://127.0.0.1:8000/predict?area_m2=70"
+   - Interactive docs: http://127.0.0.1:8000/docs
+
+3. Start the Streamlit app (terminal 2, keep the API running):
+
+   streamlit run streamlit_app.py
+
+   Opens at http://127.0.0.1:8501 — enter an area and click "Predict price".
