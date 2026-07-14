@@ -16,6 +16,10 @@
 # Ignore VS Code generated files
 *.vscode
 
+# Ignore Claude generated files
+*.claude
+
+
 # Raw data
 raw_data/
 *.csv
