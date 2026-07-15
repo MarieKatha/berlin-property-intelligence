@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain.agents import create_agent
 from langgraph.checkpoint.memory import MemorySaver
 from pprint import pprint
-from tools import get_now, generate_password
+from tools import get_now, generate_password, predict_price
 
 # Basic agent setup
 
@@ -21,7 +21,8 @@ model = init_chat_model("gemini-2.5-flash",
 
 tools = [
         get_now,
-        generate_password
+        generate_password,
+        predict_price
 ]
 
 # model_with_tools = model.bind_tools(tools)
