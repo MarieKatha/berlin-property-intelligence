@@ -6,9 +6,13 @@ def get_now():
     """
     Returns current day, date, and time in presented format
     Can be used as a reference to calculate past and future
-    moments of time
+    moments of time. If user asks only fpr time, date or day,
+    only return the parameter the user has asked for
     """
-    return datetime.now().strftime("%A, %d.%m.%Y %H:%M:%S")
+    try:
+        return datetime.now().strftime("%A, %d.%m.%Y %H:%M:%S")
+    except Exception as e:
+        return f"Tool error: Please check your input and try again. ({e})"
 
 @tool(parse_docstring=True)
 def generate_password(length: int, include_special_chars: bool) -> str:
@@ -22,9 +26,12 @@ def generate_password(length: int, include_special_chars: bool) -> str:
         include_special_chars: whether password characters contain special chars
             or not
     """
-    import random
-    import string
-    chars = string.ascii_letters + string.digits
-    if include_special_chars:
-        chars += string.punctuation
-    return "".join(random.choice(chars) for _ in range(length))
+    try:
+        import random
+        import string
+        chars = string.ascii_letters + string.digits
+        if include_special_chars:
+            chars += string.punctuation
+        return "".join(random.choice(chars) for _ in range(length))
+    except Exception as e:
+        return f"Tool error: Please check your input and try again. ({e})"
