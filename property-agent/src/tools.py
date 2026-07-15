@@ -1,5 +1,7 @@
 from datetime import datetime
 from langchain.tools import tool
+import requests
+import os
 
 @tool
 def get_now():
@@ -35,3 +37,16 @@ def generate_password(length: int, include_special_chars: bool) -> str:
         return "".join(random.choice(chars) for _ in range(length))
     except Exception as e:
         return f"Tool error: Please check your input and try again. ({e})"
+
+@tool
+def predict_price(area_m2: float) -> str:
+    """
+    Predicts the sale price in EUR for a given living area in Berlin.
+
+    Args:
+        area_m2: Living area in square meters (must be greater than 0)
+    """
+    api_url = os.getenv("API_URL", "http://localhost:8080")
+    response = requests.get(f"{api_url}/predict", params={"area_m2": area_m2})
+    result = response.json()
+    return f"{result['price_eur']} EUR"
