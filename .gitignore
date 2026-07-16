@@ -40,6 +40,9 @@ models/
 *.pckl
 *.pkl
 
+# CatBoost training logs/snapshots
+catboost_info/
+
 # Credentials (or files with potentially credentials inside)
 .env
 .env.yaml
