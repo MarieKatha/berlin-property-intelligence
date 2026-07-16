@@ -31,10 +31,15 @@ def root() -> str:
     )
 
 
-@app.get("/predict", response_model=PredictResponse)
-def predict(area_m2: float = Query(gt=0, description="Living area in square meters")) -> PredictResponse:
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded. Run `python api/train.py` first.")
+@tool
+def predict_price(area_m2: float) -> str:
+    """
+    Predicts the sale price in EUR for a given living area in Berlin.
 
-    price_eur = model.predict([[area_m2]])[0]
-    return PredictResponse(price_eur=round(float(price_eur), 2))
+    Args:
+        area_m2: Living area in square meters (must be greater than 0)
+    """
+    api_url = os.getenv("API_URL", "http://localhost:8080")
+    response = requests.get(f"{api_url}/predict", params={"area_m2": area_m2})
+    result = response.json()
+    return f"{result['price_eur']} EUR"
