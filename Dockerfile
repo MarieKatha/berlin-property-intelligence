@@ -29,5 +29,5 @@ RUN mkdir /raw_data
 # TODO: to speed up, you can load your model from MLFlow or Google Cloud Storage at startup using
 # RUN python -c 'replace_this_with_the_commands_you_need_to_run_to_load_the_model'
 
-# nach sauberem aufbau "main" durch "fast" ersetzen
-CMD uvicorn api.main:app --host 0.0.0.0 --port $PORT
+# uvicorn server starten
+CMD uvicorn api.fast:app --host 0.0.0.0 --port $PORT
