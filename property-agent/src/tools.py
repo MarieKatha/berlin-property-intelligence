@@ -1,5 +1,6 @@
 from datetime import datetime
 from langchain.tools import tool
+from geopy.geocoders import Nominatim
 import requests
 import os
 
@@ -39,6 +40,25 @@ def generate_password(length: int, include_special_chars: bool) -> str:
         return f"Tool error: Please check your input and try again. ({e})"
 
 @tool
+def get_lat_lon_osm(address: str) -> tuple[float | None, float | None]:
+    """Get lat/lon from address using OpenStreetMap (Nominatim)."""
+
+    geocoder = Nominatim(user_agent="berlin_realestate")
+
+    try:
+        location = geocoder.geocode(address)
+        if location:
+            return location.latitude, location.longitude
+        return None, None
+    except Exception:
+        return None, None
+
+
+if __name__ == "__main__":
+    lat, lon = get_lat_lon_osm("Alexander Platz")
+    print(f"Lat: {lat}, Lon: {lon}")
+
+@tool
 def predict_price(area_m2: float) -> str:
     """
     Predicts the sale price in EUR for a given living area in Berlin.
@@ -46,7 +66,7 @@ def predict_price(area_m2: float) -> str:
     Args:
         area_m2: Living area in square meters (must be greater than 0)
     """
-    api_url = os.getenv("API_URL", "http://localhost:8080")
+    api_url = os.getenv("API_URL", "http://localhost:8000")
     response = requests.get(f"{api_url}/predict", params={"area_m2": area_m2})
     result = response.json()
     return f"{result['price_eur']} EUR"
