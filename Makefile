@@ -20,14 +20,6 @@ test_structure:
 	@bash tests/test_structure.sh
 
 #======================#
-#          API         #
-#======================#
-
-run_api:
-	uvicorn api.fast:app --reload --port 8000
-
-
-#======================#
 #          GCP         #
 #======================#
 
@@ -40,27 +32,26 @@ gcloud-set-project:
 #         Docker       #
 #======================#
 
-# Local images - using local computer's architecture
-# i.e. linux/amd64 for Windows / Linux / Apple with Intel chip
-#      linux/arm64 for Apple with Apple Silicon (M1 / M2 chip)
+# Independent services, each with its own Dockerfile (repo root as build
+# context): api_sales, property-agent, streamlit-app.
 
-docker_build_local:
-	docker build --tag=$(DOCKER_IMAGE_NAME):local .
+# Build one service locally, e.g.:
+#   make docker_build_service SERVICE=api_sales
+docker_build_service:
+	docker build -f $(SERVICE)/Dockerfile -t $(SERVICE):local .
 
-docker_run_local:
-	docker run \
-		-e PORT=8000 -p $(DOCKER_LOCAL_PORT):8000 \
-		--env-file .env \
-		$(DOCKER_IMAGE_NAME):local
+# Spin up all services together for local dev (see docker-compose.yml)
+docker_compose_up:
+	docker compose up --build
 
-docker_run_local_interactively:
-	docker run -it \
-		-e PORT=8000 -p $(DOCKER_LOCAL_PORT):8000 \
-		--env-file .env \
-		$(DOCKER_IMAGE_NAME):local \
-		bash
+docker_compose_down:
+	docker compose down
 
 # Cloud images - using architecture compatible with cloud, i.e. linux/amd64
+# NOTE: docker_build/docker_push/docker_deploy below still assume a single
+# deployable image from before the api_sales/property-agent/streamlit-app
+# split -- revisit per-service (e.g. via SERVICE, like docker_build_service
+# above) before using these to push/deploy any of the three to GCP.
 
 DOCKER_IMAGE_PATH := $(GCP_REGION)-docker.pkg.dev/$(GCP_PROJECT)/$(DOCKER_REPO_NAME)/$(DOCKER_IMAGE_NAME)
 
