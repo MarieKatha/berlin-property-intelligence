@@ -2,14 +2,9 @@
 
 Reproduces the pipeline developed in notebooks/notebook_fabian_refined.ipynb:
   1. build_raw_features    -- log target, floor/position features, drop unused columns
-  2. encode_ordinal -- ordinal-encode energy_class/condition
+  2. encode_ordinal_and_onehot -- ordinal-encode energy_class/condition, one-hot bezirk/transit_line
   3. target-encode ortsteil   -- leakage-safe: out-of-fold for training, a fitted
      lookup table for anything encoded afterwards (evaluation or live inference)
-
-transit_line and bezirk are deliberately excluded (dropped in
-build_raw_features) -- neither is used as a model input. ortsteil's
-target-encoding already captures neighbourhood-level location more precisely
-than bezirk's coarser, 12-district grouping would.
 """
 from __future__ import annotations
 
@@ -36,36 +31,61 @@ def build_raw_features(df_sales: pd.DataFrame) -> pd.DataFrame:
 
     df["is_top_floor"] = (df["floor"] == df["total_floors"]).astype(int)
     df["is_ground_floor"] = (df["floor"] == 0).astype(int)
-    position_dummies = pd.get_dummies(df["position"], prefix="position", drop_first=True)
-    df = pd.concat([df, position_dummies], axis=1)
 
     drop_cols = [
-        "id", "date_listed", "kiez_premium", "property_type", "total_floors", "building_era",
-        "position", "bezirk", "transit_station", "transit_line", "transit_distance_type",
-        "to_brandenburg_gate_km", "price_usd", "price_per_m2_usd", "price_per_m2_eur",
-    ]
+    "id",
+    "date_listed",
+    "project_id",
+    "project_name",
+    "developer",
+    "property_type",
+    "transit_station",
+    "total_project_units",
+    "possession_status",
+    "payment_plan",
+    "price_per_m2_eur",
+    "price_usd",
+    "price_per_m2_usd",
+]
     df = df.drop(columns=[c for c in drop_cols if c in df.columns])
 
     return df
 
 
-def encode_ordinal(df: pd.DataFrame) -> pd.DataFrame:
-    """Ordinal-encodes energy_class/condition (natural best/worst ordering).
-    Drops lat/lon (see notebook: neighbourhood-level location, captured by the
-    target-encoded ortsteil, is more useful to trees than raw coordinates) and
-    price_eur (the untransformed target -- would leak directly into the model).
 
-    `ortsteil` is left untouched here -- it's target-encoded separately, since
-    that needs the target `y` and must be done in a leakage-safe way.
-    """
+def encode_ordinal_and_onehot(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
     df["energy_class_ordinal"] = df["energy_class"].map(ENERGY_CLASS_MAP)
-    df["condition_ordinal"] = df["condition"].map(CONDITION_MAP)
-    assert df["energy_class_ordinal"].isna().sum() == 0, "unmapped energy_class value"
-    assert df["condition_ordinal"].isna().sum() == 0, "unmapped condition value"
 
-    df = df.drop(columns=["lat", "lon", "energy_class", "condition", "price_eur"])
+    bezirk_dummies = pd.get_dummies(
+        df["bezirk"],
+        prefix="bezirk",
+        drop_first=True
+    )
+
+    transit_dummies = pd.get_dummies(
+        df["transit_line"],
+        prefix="transit",
+        drop_first=True
+    )
+
+    df = pd.concat(
+        [df, bezirk_dummies, transit_dummies],
+        axis=1
+    )
+
+    df = df.drop(
+        columns=[
+            "lat",
+            "lon",
+            "energy_class",
+            "bezirk",
+            "transit_line",
+            "price_eur",
+        ],
+        errors="ignore"
+    )
 
     return df
 

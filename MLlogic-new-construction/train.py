@@ -1,4 +1,4 @@
-"""Trains the final secondary-sales price model and exports it for deployment.
+"""Trains the final new-construction price model and exports it for deployment.
 
 Unlike the notebooks (which use an 80/20 train/test split to *evaluate* and
 compare models), this script trains on the FULL dataset -- there is no
@@ -18,7 +18,7 @@ from xgboost import XGBRegressor
 from config import MODEL_OUTPUT_PATH, RAW_DATA_PATH, TARGET, XGB_PARAMS
 from preprocessing import (
     build_raw_features,
-    encode_ordinal,
+    encode_ordinal_and_onehot,
     fit_ortsteil_lookup,
     load_raw_data,
     target_encode_out_of_fold,
@@ -28,7 +28,7 @@ from preprocessing import (
 def train() -> dict:
     df_sales = load_raw_data(RAW_DATA_PATH)
     df = build_raw_features(df_sales)
-    df = encode_ordinal(df)
+    df = encode_ordinal_and_onehot(df)
 
     y = df[TARGET]
 
@@ -46,16 +46,9 @@ def train() -> dict:
     model = XGBRegressor(**XGB_PARAMS)
     model.fit(X, y)
 
-    # Per-feature training-set average, used by predict.py's fill_missing=True path
-    # to fill in features a caller couldn't provide (e.g. only ortsteil/area_m2/
-    # condition known) -- the same "typical value" imputation validated in the
-    # "Robustness check" section of notebooks/notebook_fabian_refined.ipynb.
-    feature_fill_values = X.mean()
-
     bundle = {
         "model": model,
         "feature_columns": X.columns.tolist(),
-        "feature_fill_values": feature_fill_values,
         "ortsteil_lookup": ortsteil_lookup,
         "ortsteil_global_mean": ortsteil_global_mean,
     }

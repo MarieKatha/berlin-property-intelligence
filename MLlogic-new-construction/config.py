@@ -2,13 +2,12 @@
 
 Encoding choices and hyperparameters mirror what was validated in
 notebooks/notebook_fabian_refined.ipynb (target-encoded ortsteil, ordinal
-energy_class/condition, tuned XGBoost). bezirk and transit_line are
-deliberately excluded -- neither is used as a model input.
+energy_class/condition, one-hot bezirk/transit_line, tuned XGBoost).
 """
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-RAW_DATA_PATH = REPO_ROOT / "raw_data" / "secondary_sales.csv"
+RAW_DATA_PATH = REPO_ROOT / "raw_data" / "new_construction.csv"
 MODEL_OUTPUT_PATH = Path(__file__).resolve().parent / "model.pkl"
 
 TARGET = "price_eur_log"
@@ -23,24 +22,17 @@ CONDITION_MAP = {
 
 # Best hyperparameters found via RandomizedSearchCV in notebook_fabian_refined.ipynb
 # (test MAE ~€28,007, test R² ~0.974 on the held-out evaluation split)
-#
-# n_jobs=1 (not -1) is deliberate: XGBoost's multi-threaded histogram building
-# sums floats in a different order depending on thread scheduling, so n_jobs=-1
-# can produce a *slightly different* model on every training run even with a
-# fixed random_state (observed ~1-2% prediction drift on the same input between
-# runs). n_jobs=1 trades some training speed for byte-for-byte reproducibility,
-# which matters more for a deployment artifact than for notebook experimentation.
 XGB_PARAMS = {
-    "n_estimators": 700,
-    "max_depth": 4,
-    "learning_rate": 0.05,
-    "subsample": 1.0,
-    "colsample_bytree": 0.6,
-    "min_child_weight": 5,
-    "reg_alpha": 0,
+    "n_estimators": 1000,
+    "learning_rate": 0.03,
+    "max_depth": 5,
+    "min_child_weight": 3,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "reg_alpha": 0.1,
     "reg_lambda": 1,
     "random_state": 42,
-    "n_jobs": 1,
+    "n_jobs": -1,
 }
 
 TARGET_ENCODING_SMOOTHING = 10
