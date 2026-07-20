@@ -1,14 +1,15 @@
 """Streamlit chat UI for the Berlin property agent (calls the agent's /chat endpoint).
 
 Thin HTTP client only: no LangChain/LangGraph/Gemini deps needed here, those
-stay server-side in property-agent/src/agent_api.py.
+stay server-side in property-agent/src/fast.py.
 """
+import os
 import uuid
 
 import requests
 import streamlit as st
 
-AGENT_API_URL = "http://127.0.0.1:8001/chat"
+AGENT_API_URL = os.getenv("AGENT_API_URL", "http://127.0.0.1:8002/chat")
 
 st.title("Berlin Property Agent")
 st.caption(
