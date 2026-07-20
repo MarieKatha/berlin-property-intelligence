@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Secrets - never bake these into an image, pass via --env-file at runtime
+.env
+.env.yaml
+.envrc
+property-agent/.env
+property-agent/.envrc
+.credentials
+secrets.toml
+
+# Python cruft
+**/__pycache__/
+*.pyc
+*.egg-info
+
+# Notebooks - exploration only, not needed at runtime
+notebooks/
+**/.ipynb_checkpoints/
+
+# Raw data - large, only needed for local training, not for serving
+raw_data/
+
+# OS / editor
+.DS_Store
+*.vscode
+*.claude
+*Zone.Identifier
+
+# Docs
+README.md
