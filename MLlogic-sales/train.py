@@ -46,9 +46,16 @@ def train() -> dict:
     model = XGBRegressor(**XGB_PARAMS)
     model.fit(X, y)
 
+    # Per-feature training-set average, used by predict.py's fill_missing=True path
+    # to fill in features a caller couldn't provide (e.g. only ortsteil/area_m2/
+    # condition known) -- the same "typical value" imputation validated in the
+    # "Robustness check" section of notebooks/notebook_fabian_refined.ipynb.
+    feature_fill_values = X.mean()
+
     bundle = {
         "model": model,
         "feature_columns": X.columns.tolist(),
+        "feature_fill_values": feature_fill_values,
         "ortsteil_lookup": ortsteil_lookup,
         "ortsteil_global_mean": ortsteil_global_mean,
     }
