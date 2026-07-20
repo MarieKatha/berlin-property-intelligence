@@ -2,7 +2,8 @@
 
 Encoding choices and hyperparameters mirror what was validated in
 notebooks/notebook_fabian_refined.ipynb (target-encoded ortsteil, ordinal
-energy_class/condition, one-hot bezirk/transit_line, tuned XGBoost).
+energy_class/condition, tuned XGBoost). bezirk and transit_line are
+deliberately excluded -- neither is used as a model input.
 """
 from pathlib import Path
 
@@ -22,6 +23,13 @@ CONDITION_MAP = {
 
 # Best hyperparameters found via RandomizedSearchCV in notebook_fabian_refined.ipynb
 # (test MAE ~€28,007, test R² ~0.974 on the held-out evaluation split)
+#
+# n_jobs=1 (not -1) is deliberate: XGBoost's multi-threaded histogram building
+# sums floats in a different order depending on thread scheduling, so n_jobs=-1
+# can produce a *slightly different* model on every training run even with a
+# fixed random_state (observed ~1-2% prediction drift on the same input between
+# runs). n_jobs=1 trades some training speed for byte-for-byte reproducibility,
+# which matters more for a deployment artifact than for notebook experimentation.
 XGB_PARAMS = {
     "n_estimators": 700,
     "max_depth": 4,
@@ -32,7 +40,7 @@ XGB_PARAMS = {
     "reg_alpha": 0,
     "reg_lambda": 1,
     "random_state": 42,
-    "n_jobs": -1,
+    "n_jobs": 1,
 }
 
 TARGET_ENCODING_SMOOTHING = 10

@@ -14,7 +14,7 @@ every row it can, not hold 20% back for evaluation.
 | File | What it does |
 |---|---|
 | `config.py` | Paths, ordinal encoding maps, and the tuned XGBoost hyperparameters (copied from the notebook's `RandomizedSearchCV` result) |
-| `preprocessing.py` | Feature engineering: log-transforms the target, derives floor/position features, ordinal-encodes `energy_class`/`condition`, one-hot encodes `bezirk`/`transit_line`, and leakage-safe target-encodes `ortsteil` |
+| `preprocessing.py` | Feature engineering: log-transforms the target, derives floor/position features, ordinal-encodes `energy_class`/`condition`, and leakage-safe target-encodes `ortsteil` (`bezirk` and `transit_line` are both dropped, not used as model inputs -- `ortsteil`'s target encoding already captures location more precisely than `bezirk`'s coarser 12-district grouping) |
 | `train.py` | Loads `raw_data/secondary_sales.csv`, builds features, trains the model on all 50,000 rows, and saves `model.pkl` |
 | `predict.py` | Loads `model.pkl` and turns a single raw listing (a dict) into a predicted price in EUR — the function an API would import |
 
@@ -31,7 +31,7 @@ python train.py
 This prints something like:
 
 ```
-Trained on 50000 rows, 35 features
+Trained on 50000 rows, 18 features
 Model bundle saved to .../MLlogic-sales/model.pkl
 ```
 
@@ -71,7 +71,6 @@ bundle = load_model_bundle()
 
 listing = {
     "ortsteil": "Kreuzberg",
-    "bezirk": "Friedrichshain-Kreuzberg",
     "rooms": 2,
     "area_m2": 69.0,
     "floor": 1,
@@ -82,7 +81,6 @@ listing = {
     "has_balcony": True,
     "has_cellar": False,
     "has_parking": False,
-    "transit_line": "U1",
     "transit_distance_min": 10,
     "mortgage_rate_at_listing": 3.5,
     "position": "hinterhaus",         # hinterhaus, seitenfluegel, vorderhaus
@@ -112,13 +110,28 @@ predicted_price_eur = predict_price_eur(
 ```
 
 **Accuracy caveat:** the notebook's *"Robustness check: full model, only 3
-features known at prediction time"* section tested exactly this scenario and
-found it degrades this XGBoost model substantially — test MAE went from
-~€28,773 with all 35 real features to ~€69,731 with only `ortsteil`/`area_m2`/
-`condition` known (worse than Random Forest under the same conditions, see the
-notebook for why). Treat `fill_missing=True` predictions as a rough estimate,
-not a reliable one — the more fields you actually provide, the more the
-prediction should be trusted.
+features known at prediction time"* section tested this scenario on its
+35-feature model (before `bezirk`/`transit_line` were dropped here) and found
+it degrades XGBoost substantially — test MAE went from ~€28,773 with every
+feature known to ~€69,731 with only `ortsteil`/`area_m2`/`condition` known
+(worse than Random Forest under the same conditions, see the notebook for
+why). The same phenomenon applies to this leaner model: treat
+`fill_missing=True` predictions as a rough estimate, not a reliable one — the
+more fields you actually provide, the more the prediction should be trusted.
+
+## Reproducibility
+
+`train.py` is fully deterministic: re-running it on the same
+`secondary_sales.csv` produces a byte-for-byte identical `model.pkl` every
+time (verified, including under artificial CPU load). This is why
+`config.py` sets `XGB_PARAMS["n_jobs"] = 1` instead of `-1` — with multiple
+threads, XGBoost's histogram building sums floats in an order that depends on
+thread scheduling, so `n_jobs=-1` can silently produce a slightly different
+model (and different predictions, by ~1-2% on the same input) between
+otherwise-identical training runs, even with a fixed `random_state`. Training
+is a touch slower single-threaded, but for a deployment artifact,
+predictable behavior across retrains matters more than shaving a couple of
+seconds off `python train.py`.
 
 ## Retraining
 
