@@ -20,9 +20,9 @@ from config import CONDITION_MAP, ENERGY_CLASS_MAP, MODEL_OUTPUT_PATH
 from preprocessing import apply_ortsteil_lookup
 
 REQUIRED_FIELDS = [
-    "ortsteil", "bezirk", "rooms", "area_m2", "floor", "total_floors", "year_built",
+    "ortsteil", "rooms", "area_m2", "floor", "total_floors", "year_built",
     "energy_class", "condition", "has_lift", "has_balcony", "has_cellar",
-    "has_parking", "transit_line", "transit_distance_min",
+    "has_parking", "transit_distance_min",
     "mortgage_rate_at_listing", "position",
 ]
 
@@ -41,7 +41,7 @@ _DIRECT_FIELDS = {
 }
 
 # raw listing field -> its one-hot feature-column prefix
-_ONE_HOT_FIELDS = ("position", "bezirk", "transit_line")
+_ONE_HOT_FIELDS = ("position",)
 
 
 def load_model_bundle(path=MODEL_OUTPUT_PATH) -> dict:
@@ -127,8 +127,8 @@ def predict_price_eur(listing: dict, bundle: dict | None = None, fill_missing: b
     notebooks/notebook_fabian_refined.ipynb) tested exactly this scenario for
     this model -- reusing the fully-trained XGBoost model with most features
     mean-filled degrades it substantially (test MAE went from ~€28,773 with all
-    35 real features to ~€69,731 with only ortsteil/area_m2/condition known,
-    worse than Random Forest under the same conditions). fill_missing=True is a
+    35 real features to ~€69,731 with only ortsteil/area_m2/condition known).
+    fill_missing=True is a
     convenience for genuinely partial requests, not a substitute for providing
     real data -- the more fields you fill in, the more the prediction should be
     trusted.
@@ -144,7 +144,6 @@ def predict_price_eur(listing: dict, bundle: dict | None = None, fill_missing: b
 if __name__ == "__main__":
     example_listing = {
         "ortsteil": "Kreuzberg",
-        "bezirk": "Friedrichshain-Kreuzberg",
         "rooms": 2,
         "area_m2": 69.0,
         "floor": 1,
@@ -156,7 +155,6 @@ if __name__ == "__main__":
         "has_balcony": True,
         "has_cellar": False,
         "has_parking": False,
-        "transit_line": "U1",
         "transit_distance_min": 10,
         "mortgage_rate_at_listing": 3.5,
         "position": "hinterhaus",

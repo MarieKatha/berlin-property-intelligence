@@ -18,7 +18,7 @@ from xgboost import XGBRegressor
 from config import MODEL_OUTPUT_PATH, RAW_DATA_PATH, TARGET, XGB_PARAMS
 from preprocessing import (
     build_raw_features,
-    encode_ordinal_and_onehot,
+    encode_ordinal,
     fit_ortsteil_lookup,
     load_raw_data,
     target_encode_out_of_fold,
@@ -28,7 +28,7 @@ from preprocessing import (
 def train() -> dict:
     df_sales = load_raw_data(RAW_DATA_PATH)
     df = build_raw_features(df_sales)
-    df = encode_ordinal_and_onehot(df)
+    df = encode_ordinal(df)
 
     y = df[TARGET]
 
