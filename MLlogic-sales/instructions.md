@@ -57,6 +57,7 @@ file:
     "feature_columns": [...],       # exact column order the model expects
     "ortsteil_lookup": <pd.Series>, # neighbourhood -> typical price level
     "ortsteil_global_mean": <float>,# fallback for a neighbourhood never seen in training
+    "feature_fill_values": <pd.Series>, # per-feature training-set average, used by fill_missing=True
 }
 ```
 
@@ -93,6 +94,31 @@ predicted_price_eur = predict_price_eur(listing, bundle)
 Listings with an `ortsteil` value that never appeared in training fall back to
 the training set's global average price level automatically (no error raised)
 — see `predict.py`'s `_build_feature_row`.
+
+## Partial listings (`fill_missing=True`)
+
+By default, `predict_price_eur` requires every field in `REQUIRED_FIELDS` and
+raises `ValueError` listing exactly what's missing otherwise. If you only have
+some fields — e.g. just `ortsteil`, `area_m2`, `condition` — pass
+`fill_missing=True` to fill in everything else with its training-set average
+instead of raising:
+
+```python
+predicted_price_eur = predict_price_eur(
+    {"ortsteil": "Kreuzberg", "area_m2": 69.0, "condition": "saniert"},
+    bundle,
+    fill_missing=True,
+)
+```
+
+**Accuracy caveat:** the notebook's *"Robustness check: full model, only 3
+features known at prediction time"* section tested exactly this scenario and
+found it degrades this XGBoost model substantially — test MAE went from
+~€28,773 with all 35 real features to ~€69,731 with only `ortsteil`/`area_m2`/
+`condition` known (worse than Random Forest under the same conditions, see the
+notebook for why). Treat `fill_missing=True` predictions as a rough estimate,
+not a reliable one — the more fields you actually provide, the more the
+prediction should be trusted.
 
 ## Retraining
 
