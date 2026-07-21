@@ -33,10 +33,10 @@ gcloud-set-project:
 #======================#
 
 # Independent services, each with its own Dockerfile (repo root as build
-# context): api_sales, property-agent, streamlit-app.
+# context): api, property-agent, streamlit-app.
 
 # Build one service locally, e.g.:
-#   make docker_build_service SERVICE=api_sales
+#   make docker_build_service SERVICE=api
 docker_build_service:
 	docker build -f $(SERVICE)/Dockerfile -t $(SERVICE):local .
 
@@ -49,7 +49,7 @@ docker_compose_down:
 
 # Cloud images - using architecture compatible with cloud, i.e. linux/amd64
 # NOTE: docker_build/docker_push/docker_deploy below still assume a single
-# deployable image from before the api_sales/property-agent/streamlit-app
+# deployable image from before the api/property-agent/streamlit-app
 # split -- revisit per-service (e.g. via SERVICE, like docker_build_service
 # above) before using these to push/deploy any of the three to GCP.
 
