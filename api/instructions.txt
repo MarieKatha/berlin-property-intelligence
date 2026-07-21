@@ -1,0 +1,135 @@
+How to run the Berlin Property Intelligence API
+==================================================
+
+Run all commands from the project root:
+/home/fabian/code/MarieKatha/berlin-property-intelligence
+
+Make sure the "berlin-property" pyenv env is active (it's the default for
+this directory via .python-version). If commands aren't found, use the
+full path instead, e.g. /home/fabian/.pyenv/versions/berlin-property/bin/uvicorn
+
+This one app serves all three price models, each behind its own endpoint --
+it imports each model's existing prediction code directly rather than
+duplicating any training or preprocessing logic:
+
+   /predict_sales         -- MLlogic-sales/          (secondary-sales price)
+   /predict_construction  -- MLlogic-new-construction/ (new-construction price)
+   /predict_rentals       -- MLlogic_rent/            (monthly warm rent)
+
+1. (One-time, or after updating the underlying raw_data/*.csv) Train/refresh
+   whichever model changed:
+
+   python MLlogic-sales/train.py               # -> MLlogic-sales/model.pkl
+   python MLlogic-new-construction/train.py     # -> MLlogic-new-construction/model.pkl
+
+   MLlogic_rent/ ships its model already trained (xgboost_rental_model.json
+   + the *_encoder.pkl files) -- there's no train.py to re-run there.
+
+2. Start the API:
+
+   uvicorn api.fast:app --port 8001
+
+   - Visit http://127.0.0.1:8001/ in a browser for a welcome page with one
+     example link per endpoint.
+   - Interactive docs: http://127.0.0.1:8001/docs
+     (ortsteil, energy_class, condition, position and transit_line all
+     render as dropdowns there, since they're typed as Enums in fast.py)
+
+Common to all three endpoints
+------------------------------
+
+   ortsteil  -- dropdown: all 82 Berlin neighbourhoods, e.g. Kreuzberg
+   area_m2   -- living area in m^2
+
+None of the three endpoints take `bezirk` as a parameter: predict_sales
+doesn't use it as a model feature at all (ortsteil's target encoding already
+captures location more precisely -- see MLlogic-sales/preprocessing.py);
+predict_construction and predict_rentals both derive it automatically from
+ortsteil instead (every ortsteil maps to exactly one bezirk, see
+ORTSTEIL_TO_BEZIRK in fast.py), so there's nothing to keep in sync manually.
+
+/predict_sales
+---------------
+
+   curl "http://127.0.0.1:8001/predict_sales?ortsteil=Kreuzberg&area_m2=69&condition=saniert"
+
+Required: ortsteil, area_m2, condition (dropdown: renovierungsbeduerftig,
+renoviert, modernisiert, saniert, kernsaniert).
+
+Everything else is optional -- rooms, floor, total_floors, year_built,
+energy_class (dropdown: A_plus..H), has_lift, has_balcony, has_cellar,
+has_parking, transit_distance_min, mortgage_rate_at_listing, position
+(dropdown: gartenhaus, hinterhaus, seitenfluegel, vorderhaus) -- and is
+filled with its training-set average if omitted. `listing_price` (the
+listing's actual/asking price) is also optional: if given, the response
+adds listing_vs_predicted_pct and a comparison message.
+
+Accuracy caveat: this endpoint always fills missing optional fields with
+their training-set average rather than requiring every field -- a genuine
+accuracy trade-off. The notebook's "Robustness check" section found test MAE
+goes from ~€28,773 with every feature known to ~€69,731 with only
+ortsteil/area_m2/condition known -- the more optional fields you actually
+provide, the more the prediction should be trusted.
+
+/predict_construction
+-----------------------
+
+   curl "http://127.0.0.1:8001/predict_construction?ortsteil=Mitte%20(Ort)&area_m2=65"
+
+Required: ortsteil, area_m2.
+
+Everything else is optional -- rooms, floor, total_floors, completion_year,
+energy_class (dropdown: A_plus..H), has_lift, has_balcony, has_parking,
+transit_line (dropdown: S Ringbahn, S1, Stadtbahn, U1, U2, U7, U8),
+transit_distance_min, mortgage_rate_at_listing -- and is filled with its
+training-set average if omitted, same as predict_sales.
+
+There's no `condition` parameter -- new-construction listings don't have
+one -- and no listing-price comparison feature (MLlogic-new-construction
+doesn't have one built).
+
+/predict_rentals
+------------------
+
+   curl "http://127.0.0.1:8001/predict_rentals?ortsteil=Kreuzberg&area_m2=65&condition=saniert"
+
+Required: ortsteil, area_m2, condition. Note: this dropdown has only 4
+values (renovierungsbeduerftig, renoviert, modernisiert, saniert) --
+`kernsaniert` is deliberately excluded. The rental model's condition encoder
+(MLlogic_rent/condition_encoder.pkl) was fit without that category ever
+appearing in its training data; passing it would silently be treated as an
+unrecognised value rather than raising, which would quietly corrupt the
+prediction -- so it's left off the dropdown entirely instead.
+
+Everything else is optional and, when provided, improves accuracy: rooms,
+floor, total_floors (only used together with floor, to work out whether the
+unit is on the top/ground floor -- not a model feature by itself),
+energy_class (dropdown: A_plus..H), has_lift, has_balcony, furnished,
+transit_distance_min, transit_line (dropdown: S Ringbahn, S1, Stadtbahn, U1,
+U2, U7, U8), position (dropdown: gartenhaus, hinterhaus, seitenfluegel,
+vorderhaus). `listing_rent_eur` (the listing's actual/asking monthly warm
+rent) is also optional: if given, the response adds
+listing_vs_predicted_pct and a comparison message, same as predict_sales.
+
+Response shape (predict_sales and predict_rentals)
+------------------------------------------------------
+
+   With listing_price / listing_rent_eur:
+
+     {"predicted_price_eur": 318784.16, "listing_vs_predicted_pct": 188.22,
+      "message": "This offer is 88.22% more expensive than my prediction."}
+
+     listing_vs_predicted_pct is (actual / predicted) * 100. >100% means
+     priced above the model's prediction (possibly overpriced) -- message
+     says "X% more expensive than my prediction". <=100% means priced at or
+     below it (possibly underpriced, or just a good deal) -- message says
+     "X% cheaper than my prediction".
+
+   Without it:
+
+     {"predicted_price_eur": 318784.16, "listing_vs_predicted_pct": null,
+      "message": "if you specify the actual listing price I can compare it
+      with my prediction and rate the value of the listing"}
+
+predict_construction only ever returns {"predicted_price_eur": ...} -- no
+comparison fields.

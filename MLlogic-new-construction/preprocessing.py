@@ -66,7 +66,7 @@ def encode_ordinal_and_onehot(df: pd.DataFrame) -> pd.DataFrame:
 
     transit_dummies = pd.get_dummies(
         df["transit_line"],
-        prefix="transit",
+        prefix="transit_line",
         drop_first=True
     )
 

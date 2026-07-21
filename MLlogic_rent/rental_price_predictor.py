@@ -7,6 +7,7 @@ import pickle
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import xgboost as xgb
 
@@ -67,22 +68,37 @@ class RentalPricePredictor:
         # Target encoding
         df["ortsteil"] = self.target_encoder.transform(df[["ortsteil"]])
 
-        # Ordinal encoding
-        df["energy_class"] = self.energy_encoder.transform(df[["energy_class"]])
-        df["condition"] = self.condition_encoder.transform(df[["condition"]])
+        # Ordinal encoding -- only if provided; a genuinely missing field is left
+        # for the fill-in step below instead of KeyError-ing here.
+        if "energy_class" in df.columns:
+            # This encoder was fit on "A+", not the "A_plus" spelling used by the
+            # raw data and every other endpoint in this project -- alias it so
+            # callers can pass the same "A_plus" value everywhere.
+            df["energy_class"] = df["energy_class"].replace({"A_plus": "A+"})
+            df["energy_class"] = self.energy_encoder.transform(df[["energy_class"]])
+        if "condition" in df.columns:
+            df["condition"] = self.condition_encoder.transform(df[["condition"]])
 
-        # One-hot encoding
+        # One-hot encoding -- only for whichever of these were actually provided.
+        # A category the caller omits entirely just leaves that group's dummies
+        # unset, filled in as 0 below (same as an unseen/reference category).
         categorical_features = ["bezirk", "transit_line", "position"]
 
         for col in categorical_features:
-            dummies = pd.get_dummies(df[col], prefix=col, drop_first=True)
-            df = pd.concat([df, dummies], axis=1)
-            df.drop(columns=[col], inplace=True)
+            if col in df.columns:
+                dummies = pd.get_dummies(df[col], prefix=col, drop_first=True)
+                df = pd.concat([df, dummies], axis=1)
+                df.drop(columns=[col], inplace=True)
 
-        # Match training features
+        # Match training features. One-hot dummies default to 0 (not-this-category);
+        # anything else missing (an ordinal/continuous feature the caller didn't
+        # provide) is left as NaN, which this XGBoost model was trained to handle
+        # natively (see metadata.json's "missing": NaN) -- more honest than
+        # silently guessing 0 for a feature we simply don't know.
+        dummy_prefixes = tuple(f"{col}_" for col in categorical_features) + ("building_era_",)
         for col in self.feature_columns:
             if col not in df.columns:
-                df[col] = 0
+                df[col] = 0 if col.startswith(dummy_prefixes) else np.nan
 
         # Correct feature order
         X = df[self.feature_columns]

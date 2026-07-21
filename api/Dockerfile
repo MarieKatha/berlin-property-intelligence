@@ -5,7 +5,9 @@ COPY requirements.txt requirements.txt
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api_sales api_sales
+COPY api api
 COPY MLlogic-sales MLlogic-sales
+COPY MLlogic-new-construction MLlogic-new-construction
+COPY MLlogic_rent MLlogic_rent
 
-CMD uvicorn api_sales.fast:app --host 0.0.0.0 --port $PORT
+CMD uvicorn api.fast:app --host 0.0.0.0 --port $PORT

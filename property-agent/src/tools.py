@@ -57,7 +57,7 @@ def predict_sales_price(
 ) -> str:
     """
     Predicts the secondary-sales price in EUR for a Berlin listing using the
-    full XGBoost model served at api_sales/fast.py's /predict (backed by
+    full XGBoost model served at api/fast.py's /predict_sales (backed by
     MLlogic-sales). Only ortsteil, area_m2 and condition are required to call
     this tool -- every other field is optional and, when provided, improves
     prediction accuracy. How to collect these fields from the user is
@@ -107,7 +107,7 @@ def predict_sales_price(
             "position": position,
         }
         params = {k: v for k, v in params.items() if v is not None}
-        response = requests.get(f"{api_url}/predict", params=params)
+        response = requests.get(f"{api_url}/predict_sales", params=params)
         response.raise_for_status()
         result = response.json()
         reply = f"{result['predicted_price_eur']} EUR"

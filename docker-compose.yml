@@ -1,8 +1,8 @@
 services:
-  api_sales:
+  api:
     build:
       context: .
-      dockerfile: api_sales/Dockerfile
+      dockerfile: api/Dockerfile
     environment:
       - PORT=8001
     ports:
@@ -14,7 +14,7 @@ services:
       dockerfile: property-agent/Dockerfile
     environment:
       - PORT=8002
-      - API_SALES_URL=http://api_sales:8001
+      - API_SALES_URL=http://api:8001
       # No GCP Application Default Credentials in the container -- force the
       # plain GEMINI_API_KEY path instead of Vertex AI (overrides .env below).
       - GOOGLE_GENAI_USE_VERTEXAI=false
@@ -23,7 +23,7 @@ services:
     ports:
       - "8002:8002"
     depends_on:
-      - api_sales
+      - api
 
   streamlit:
     build:
