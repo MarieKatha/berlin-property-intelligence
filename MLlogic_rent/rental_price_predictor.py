@@ -105,14 +105,14 @@ class RentalPricePredictor:
         prediction = self.model.predict(X)[0]
 
         return {
-            "predicted_rent_eur": float(prediction),
-            "model_type": "XGBRegressor",
-            "confidence": {
-                "r2_score": self.metadata["model_performance"]["r2_score"],
-                "mae": self.metadata["model_performance"]["mae"],
-                "rmse": self.metadata["model_performance"]["rmse"]
-            }
-        }
+        'predicted_rent_eur': float(prediction),
+        'model_type': self.metadata["model"]["type"],
+        'confidence': {
+        'r2_score': self.metadata["performance"]["r2"],
+        'mae': self.metadata["performance"]["mae"],
+        'rmse': self.metadata["performance"]["rmse"]
+    }
+}
 
 
 # Load model only once when needed

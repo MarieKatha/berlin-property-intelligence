@@ -1,0 +1,17 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Copy your model files
+COPY MLlogic_rent/ ./MLlogic_rent/
+COPY main.py .
+COPY api_requirements.txt .
+
+# Install dependencies
+RUN pip install --no-cache-dir -r api_requirements.txt
+
+# Expose port
+EXPOSE 8000
+
+# Run API
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
