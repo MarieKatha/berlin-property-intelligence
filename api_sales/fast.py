@@ -1,6 +1,6 @@
 """FastAPI app exposing the full secondary-sales price model (MLlogic-sales/)
 trained on 18 features (location, size, condition, energy class, floor,
-amenities, ...), not just area_m2 like the simpler api/ app.
+amenities, ...).
 
 This file only serves the model -- it doesn't retrain or duplicate any
 preprocessing logic. All of that lives in MLlogic-sales/ (config.py,
@@ -18,11 +18,6 @@ price, provided so the response can report how it compares to the model's
 prediction (listing_vs_predicted_pct: >100% means priced above the
 prediction, <100% means priced below it). If it's omitted, the response
 skips that comparison and explains how to get it instead.
-
-`bezirk` and `transit_line` are NOT request parameters: neither is a model
-feature (see MLlogic-sales/preprocessing.py -- ortsteil's target encoding
-already captures location more precisely than bezirk's coarser 12-district
-grouping, and transit_line simply wasn't found useful enough to keep).
 """
 import re
 import sys
