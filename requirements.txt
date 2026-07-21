@@ -104,6 +104,11 @@ scikit-learn==1.7.2
 scipy==1.15.3
 seaborn==0.13.2
 Send2Trash==2.1.0
+# Not exact-pinned like the rest of this file: shap's newest release needing
+# each Python version differs (0.52.0 needs Python>=3.12, 0.49.1 is the
+# newest that installs on 3.10/3.11) -- MLlogic-sales/predict.py's
+# load_explainer works with any of them.
+shap>=0.49.1
 six==1.17.0
 soupsieve==2.8.4
 stack-data==0.6.3

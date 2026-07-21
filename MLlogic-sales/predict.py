@@ -9,6 +9,9 @@ By default every field in REQUIRED_FIELDS must be provided. Pass
 fill_missing=True to allow partial listings -- any feature that can't be
 derived from what was provided is filled with its training-set average
 instead (see the accuracy caveat on predict_price_eur below).
+
+load_explainer/explain_prediction add SHAP-based explanations on top of a
+prediction -- see explain_prediction's docstring.
 """
 from __future__ import annotations
 
@@ -111,6 +114,148 @@ def _build_feature_row(listing: dict, bundle: dict, fill_missing: bool) -> pd.Da
     return row.to_frame().T[feature_columns]
 
 
+def _fix_xgboost_base_score_for_shap(booster) -> None:
+    """Patches `booster.save_raw` so shap.TreeExplainer can read this model.
+
+    xgboost>=3.0 serializes a single-target regressor's base_score as a
+    bracketed string, e.g. "[12.372406]", in its UBJSON dump. shap<0.50
+    expects a plain numeric string there and raises `ValueError: could not
+    convert string to float` on TreeExplainer construction otherwise --
+    shap>=0.50 (needs Python>=3.11, see requirements.txt) parses the
+    bracketed form fine on its own. This patch strips the brackets from that
+    one field, byte-for-byte, in the UBJSON buffer shap reads the model
+    through, leaving every other byte untouched -- it's a no-op (returns the
+    buffer unchanged) whenever the format doesn't match what it's looking
+    for, so it's safe to apply unconditionally regardless of shap version.
+    Only needed for shap<0.50; kept as a defensive fallback since this
+    project runs across multiple Python versions (3.10-3.12) with different
+    shap versions actually installable.
+    """
+    original_save_raw = booster.save_raw
+
+    def patched_save_raw(raw_format="deprecated"):
+        raw = original_save_raw(raw_format=raw_format)
+        if raw_format != "ubj":
+            return raw
+        raw = bytes(raw)
+        key = b"base_score"
+        idx = raw.find(key)
+        if idx == -1:
+            return raw
+        pos = idx + len(key)
+        if raw[pos:pos + 1] != b"S":  # not a string-encoded base_score -- nothing to fix
+            return raw
+        pos += 1
+        length_type = raw[pos:pos + 1]
+        length_sizes = {b"i": 1, b"U": 1, b"I": 2, b"l": 4, b"L": 8}
+        if length_type not in length_sizes:
+            return raw
+        length_size = length_sizes[length_type]
+        signed = length_type in (b"i", b"I", b"l", b"L")
+        old_length = int.from_bytes(raw[pos + 1:pos + 1 + length_size], "big", signed=signed)
+        content_start = pos + 1 + length_size
+        old_content = raw[content_start:content_start + old_length]
+        if not (old_content.startswith(b"[") and old_content.endswith(b"]")):
+            return raw  # already plain, e.g. already patched, or a shap version that stored it differently
+        new_content = old_content[1:-1]
+        new_length_bytes = len(new_content).to_bytes(length_size, "big", signed=signed)
+        return raw[:pos + 1] + new_length_bytes + new_content + raw[content_start + old_length:]
+
+    booster.save_raw = patched_save_raw
+
+
+def load_explainer(bundle: dict):
+    """Builds a SHAP TreeExplainer for the model in `bundle`, for use with
+    explain_prediction below. Construction takes a moment (it parses every
+    tree) -- build once, e.g. at API startup, and reuse it across requests
+    rather than rebuilding per call.
+
+    Requires the optional `shap` dependency -- imported lazily here so the
+    rest of this module (predict_price_eur etc.) works fine without it.
+    """
+    import shap
+
+    _fix_xgboost_base_score_for_shap(bundle["model"].get_booster())
+    return shap.TreeExplainer(bundle["model"])
+
+
+# Maps each raw listing field to the model feature column(s) it controls, for
+# explain_prediction below. is_top_floor/is_ground_floor are derived jointly
+# from floor+total_floors (see _build_feature_row): is_ground_floor only
+# needs floor, so it's grouped under "floor"; is_top_floor needs both, so its
+# contribution is attributed to "total_floors" specifically (floor's own
+# direct effect is already covered by the "floor" and "is_ground_floor"
+# columns). "position" isn't listed here -- it's a one-hot group whose column
+# names depend on the chosen category, so it's resolved dynamically instead.
+_FIELD_TO_FEATURE_COLUMNS = {
+    "ortsteil": ["ortsteil_target_enc"],
+    "area_m2": ["area_m2"],
+    "condition": ["condition_ordinal"],
+    "rooms": ["rooms"],
+    "floor": ["floor", "is_ground_floor"],
+    "total_floors": ["is_top_floor"],
+    "year_built": ["year_built"],
+    "energy_class": ["energy_class_ordinal"],
+    "has_lift": ["has_lift"],
+    "has_balcony": ["has_balcony"],
+    "has_cellar": ["has_cellar"],
+    "has_parking": ["has_parking"],
+    "transit_distance_min": ["transit_distance_min"],
+    "mortgage_rate_at_listing": ["mortgage_rate_at_listing"],
+}
+
+
+def explain_prediction(listing: dict, bundle: dict, explainer) -> tuple[float, list[dict]]:
+    """Predicts the price like predict_price_eur (always with
+    fill_missing=True), and additionally returns how much each EXPLICITLY
+    PROVIDED field in `listing` moved that prediction, in EUR, sorted by
+    |impact| descending.
+
+    A field not in `listing` -- filled with its training-set average -- is
+    left out of the breakdown entirely: its SHAP contribution would describe
+    a "typical" listing rather than anything the caller actually told us, so
+    surfacing it would be misleading.
+
+    Uses SHAP TreeExplainer, which computes exact Shapley values for tree
+    models directly from the trained model, no retraining needed. Because
+    this model predicts log1p(price), not price itself, SHAP values are
+    additive in log-space, not EUR. Converting a feature's contribution to a
+    EUR figure is therefore an approximation: for each field, it's the
+    difference between the actual prediction and the counterfactual
+    prediction with just that field's SHAP contribution removed. These
+    per-field EUR figures won't sum exactly to (predicted price - "nothing
+    known" baseline) because of that log/EUR nonlinearity, but each one is
+    individually a faithful answer to "how much is this field worth here".
+    """
+    X_row = _build_feature_row(listing, bundle, fill_missing=True)
+    shap_row = np.asarray(explainer.shap_values(X_row)).reshape(-1)
+    base_value = float(np.asarray(explainer.expected_value).reshape(-1)[0])
+    log_pred = base_value + shap_row.sum()
+    predicted_price_eur = float(np.expm1(log_pred))
+
+    columns = list(X_row.columns)
+    col_index = {c: i for i, c in enumerate(columns)}
+
+    explanations = []
+    for field, value in listing.items():
+        if field == "position":
+            feature_cols = [c for c in columns if c.startswith("position_")]
+        else:
+            feature_cols = _FIELD_TO_FEATURE_COLUMNS.get(field)
+        if not feature_cols:
+            continue  # not a model input this function knows how to attribute
+        field_shap = sum(shap_row[col_index[c]] for c in feature_cols if c in col_index)
+        counterfactual_price = float(np.expm1(log_pred - field_shap))
+        explanations.append({
+            "field": field,
+            "value": value,
+            "impact_eur": round(predicted_price_eur - counterfactual_price, 2),
+        })
+
+    explanations.sort(key=lambda e: abs(e["impact_eur"]), reverse=True)
+    return predicted_price_eur, explanations
+
+
 def predict_price_eur(listing: dict, bundle: dict | None = None, fill_missing: bool = False) -> float:
     """Predicts the sale price in EUR for a single listing (a dict of raw fields,
     see REQUIRED_FIELDS).
@@ -169,3 +314,10 @@ if __name__ == "__main__":
     }
     predicted_price_partial = predict_price_eur(partial_listing, fill_missing=True)
     print(f"Partial listing: €{predicted_price_partial:,.0f}  (fill_missing=True)")
+
+    bundle = load_model_bundle()
+    explainer = load_explainer(bundle)
+    predicted_price, explanation = explain_prediction(partial_listing, bundle, explainer)
+    print(f"\nExplanation for partial listing (€{predicted_price:,.0f}):")
+    for item in explanation:
+        print(f"  {item['field']:<12} = {item['value']!r:<15} impact: {item['impact_eur']:+,.2f} EUR")
