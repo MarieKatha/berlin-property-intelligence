@@ -24,7 +24,7 @@ import re
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
@@ -68,6 +68,17 @@ try:
     sales_bundle = sales_predict.load_model_bundle()
 except FileNotFoundError:
     sales_bundle = None
+
+sales_explainer = None
+if sales_bundle is not None:
+    try:
+        sales_explainer = sales_predict.load_explainer(sales_bundle)
+    except Exception:
+        # Explanations are a nice-to-have on top of predict_sales -- if shap
+        # isn't installed or something about the model trips it up, degrade
+        # to predictions without an explanation rather than failing the
+        # whole endpoint.
+        sales_explainer = None
 
 try:
     construction_bundle = construction_predict.load_model_bundle()
@@ -246,10 +257,17 @@ ORTSTEIL_TO_BEZIRK = {
 assert set(ORTSTEIL_TO_BEZIRK) == set(_ORTSTEIL_VALUES), "ORTSTEIL_TO_BEZIRK is out of sync with _ORTSTEIL_VALUES"
 
 
+class FieldExplanation(BaseModel):
+    field: str
+    value: Any
+    impact_eur: float
+
+
 class PredictResponse(BaseModel):
     predicted_price_eur: float
     listing_vs_predicted_pct: Optional[float] = None
     message: Optional[str] = None
+    explanation: Optional[list[FieldExplanation]] = None
 
 
 class ConstructionPredictResponse(BaseModel):
@@ -330,6 +348,14 @@ def predict_sales(
     encoding already captures location more precisely than bezirk's coarser
     12-district grouping, and transit_line simply wasn't found useful enough
     to keep).
+
+    The response's `explanation` breaks down how much each field YOU
+    explicitly provided moved the prediction, in EUR (via SHAP -- see
+    MLlogic-sales/predict.py's explain_prediction docstring for the
+    approximation this involves). Fields left out of the request -- filled
+    with their training-set average -- are left out of `explanation` too,
+    since their "contribution" would just describe a typical listing, not
+    yours.
     """
     if sales_bundle is None:
         raise HTTPException(status_code=503, detail="Model not loaded. Run `python MLlogic-sales/train.py` first.")
@@ -349,7 +375,11 @@ def predict_sales(
     try:
         # fill_missing is always on: only ortsteil/area_m2/condition are required
         # above, so every other field is routinely absent by design.
-        predicted_price_eur = sales_predict.predict_price_eur(listing, sales_bundle, fill_missing=True)
+        if sales_explainer is not None:
+            predicted_price_eur, explanation = sales_predict.explain_prediction(listing, sales_bundle, sales_explainer)
+        else:
+            predicted_price_eur = sales_predict.predict_price_eur(listing, sales_bundle, fill_missing=True)
+            explanation = None
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -358,12 +388,14 @@ def predict_sales(
             predicted_price_eur=round(predicted_price_eur, 2),
             message="if you specify the actual listing price I can compare it with my "
             "prediction and rate the value of the listing",
+            explanation=explanation,
         )
 
     listing_vs_predicted_pct, message = _comparison(listing_price, predicted_price_eur)
     return PredictResponse(
         predicted_price_eur=round(predicted_price_eur, 2),
         listing_vs_predicted_pct=listing_vs_predicted_pct,
+        explanation=explanation,
         message=message,
     )
 

@@ -64,6 +64,16 @@ filled with its training-set average if omitted. `listing_price` (the
 listing's actual/asking price) is also optional: if given, the response
 adds listing_vs_predicted_pct and a comparison message.
 
+The response also includes `explanation`: a breakdown of how much each
+field YOU explicitly provided moved the prediction, in EUR (computed via
+SHAP -- see MLlogic-sales/predict.py's explain_prediction docstring for
+details, including the log-price/EUR approximation this involves). Fields
+you didn't provide -- filled with their training-set average -- are left
+out of this breakdown entirely, since their "contribution" would just
+describe a typical listing, not yours. If `shap` isn't installed or the
+explainer failed to build at startup, `explanation` is simply omitted
+(null) and the prediction itself still works.
+
 Accuracy caveat: this endpoint always fills missing optional fields with
 their training-set average rather than requiring every field -- a genuine
 accuracy trade-off. The notebook's "Robustness check" section found test MAE
@@ -131,5 +141,20 @@ Response shape (predict_sales and predict_rentals)
       "message": "if you specify the actual listing price I can compare it
       with my prediction and rate the value of the listing"}
 
+predict_sales only: both response shapes above also include `explanation`,
+e.g. for
+"?ortsteil=Kreuzberg&area_m2=69&condition=saniert&position=hinterhaus":
+
+     "explanation": [
+       {"field": "ortsteil", "value": "Kreuzberg", "impact_eur": 154480.5},
+       {"field": "position", "value": "hinterhaus", "impact_eur": -30617.59},
+       {"field": "condition", "value": "saniert", "impact_eur": 27150.53},
+       {"field": "area_m2", "value": 69.0, "impact_eur": 14245.91}
+     ]
+
+   Sorted by |impact_eur| descending. Only fields present in the request
+   appear here -- rooms/floor/energy_class/etc weren't given in this
+   example, so they're absent, not zeroed out.
+
 predict_construction only ever returns {"predicted_price_eur": ...} -- no
-comparison fields.
+comparison fields, no explanation.
