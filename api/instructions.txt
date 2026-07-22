@@ -72,7 +72,9 @@ you didn't provide -- filled with their training-set average -- are left
 out of this breakdown entirely, since their "contribution" would just
 describe a typical listing, not yours. If `shap` isn't installed or the
 explainer failed to build at startup, `explanation` is simply omitted
-(null) and the prediction itself still works.
+(null) and the prediction itself still works. (All three endpoints below
+have this same `explanation` field and the same caveats -- not repeated
+per-endpoint.)
 
 Accuracy caveat: this endpoint always fills missing optional fields with
 their training-set average rather than requiring every field -- a genuine
@@ -96,7 +98,9 @@ training-set average if omitted, same as predict_sales.
 
 There's no `condition` parameter -- new-construction listings don't have
 one -- and no listing-price comparison feature (MLlogic-new-construction
-doesn't have one built).
+doesn't have one built). It does get `explanation` like predict_sales;
+`bezirk`'s contribution is folded into `ortsteil`'s there, since bezirk is
+never something you actually typed (see ORTSTEIL_TO_BEZIRK above).
 
 /predict_rentals
 ------------------
@@ -120,6 +124,14 @@ U2, U7, U8), position (dropdown: gartenhaus, hinterhaus, seitenfluegel,
 vorderhaus). `listing_rent_eur` (the listing's actual/asking monthly warm
 rent) is also optional: if given, the response adds
 listing_vs_predicted_pct and a comparison message, same as predict_sales.
+It also gets `explanation`, same idea as predict_sales/predict_construction
+-- with one difference: this model predicts the rent directly rather than
+a log-transformed price, so its `impact_eur` figures are exact SHAP values,
+not the counterfactual approximation the other two endpoints use. `bezirk`
+is folded into `ortsteil` here too. `position` currently has no measurable
+effect on this model's predictions (a pre-existing quirk of how it was
+trained -- see RentalPricePredictor._build_feature_frame), so it'll show up
+with `impact_eur: 0.0` if you provide it, which is expected, not a bug.
 
 Response shape (predict_sales and predict_rentals)
 ------------------------------------------------------
@@ -141,8 +153,8 @@ Response shape (predict_sales and predict_rentals)
       "message": "if you specify the actual listing price I can compare it
       with my prediction and rate the value of the listing"}
 
-predict_sales only: both response shapes above also include `explanation`,
-e.g. for
+All three endpoints' responses also include `explanation`, e.g. for
+predict_sales with
 "?ortsteil=Kreuzberg&area_m2=69&condition=saniert&position=hinterhaus":
 
      "explanation": [
@@ -153,8 +165,11 @@ e.g. for
      ]
 
    Sorted by |impact_eur| descending. Only fields present in the request
-   appear here -- rooms/floor/energy_class/etc weren't given in this
-   example, so they're absent, not zeroed out.
+   appear here (or folded into "ortsteil", for the internally-derived
+   "bezirk") -- rooms/floor/energy_class/etc weren't given in this example,
+   so they're absent, not zeroed out. The one exception is predict_rentals'
+   "position", which always appears at 0.0 if given (see its section above).
 
-predict_construction only ever returns {"predicted_price_eur": ...} -- no
-comparison fields, no explanation.
+predict_construction only ever returns {"predicted_price_eur": ...,
+"explanation": [...]} -- no comparison fields (no listing-price feature
+exists for that model).

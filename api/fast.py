@@ -33,6 +33,7 @@ from pydantic import BaseModel
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from MLlogic_rent import rental_price_predictor  # noqa: E402
 from MLlogic_rent.rental_price_predictor import RentalPricePredictor  # noqa: E402
 
 
@@ -85,10 +86,24 @@ try:
 except FileNotFoundError:
     construction_bundle = None
 
+construction_explainer = None
+if construction_bundle is not None:
+    try:
+        construction_explainer = construction_predict.load_explainer(construction_bundle)
+    except Exception:
+        construction_explainer = None
+
 try:
     rental_predictor = RentalPricePredictor()
 except Exception:
     rental_predictor = None
+
+rental_explainer = None
+if rental_predictor is not None:
+    try:
+        rental_explainer = rental_price_predictor.load_explainer(rental_predictor)
+    except Exception:
+        rental_explainer = None
 
 
 # Enums render as dropdowns in the Swagger UI (/docs) instead of free-text boxes.
@@ -272,12 +287,14 @@ class PredictResponse(BaseModel):
 
 class ConstructionPredictResponse(BaseModel):
     predicted_price_eur: float
+    explanation: Optional[list[FieldExplanation]] = None
 
 
 class RentPredictResponse(BaseModel):
     predicted_rent_eur: float
     listing_vs_predicted_pct: Optional[float] = None
     message: Optional[str] = None
+    explanation: Optional[list[FieldExplanation]] = None
 
 
 def _comparison(actual: float, predicted: float) -> tuple[float, str]:
@@ -426,6 +443,13 @@ def predict_construction(
     `bezirk` isn't a parameter: it's derived automatically from `ortsteil`
     (see ORTSTEIL_TO_BEZIRK above). There's no `condition` field --
     new-construction listings don't have one.
+
+    Like predict_sales, the response includes `explanation`: how much each
+    field YOU explicitly provided moved the prediction, in EUR (via SHAP).
+    `bezirk` never appears there on its own -- since it's auto-derived, its
+    contribution is folded into `ortsteil`'s. See
+    MLlogic-new-construction/predict.py's explain_prediction docstring for
+    details.
     """
     if construction_bundle is None:
         raise HTTPException(
@@ -446,11 +470,19 @@ def predict_construction(
     try:
         # fill_missing is always on: only ortsteil/area_m2 are required above,
         # so every other field is routinely absent by design.
-        predicted_price_eur = construction_predict.predict_price_eur(listing, construction_bundle, fill_missing=True)
+        if construction_explainer is not None:
+            predicted_price_eur, explanation = construction_predict.explain_prediction(
+                listing, construction_bundle, construction_explainer
+            )
+        else:
+            predicted_price_eur = construction_predict.predict_price_eur(
+                listing, construction_bundle, fill_missing=True
+            )
+            explanation = None
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    return ConstructionPredictResponse(predicted_price_eur=round(predicted_price_eur, 2))
+    return ConstructionPredictResponse(predicted_price_eur=round(predicted_price_eur, 2), explanation=explanation)
 
 
 @app.get("/predict_rentals", response_model=RentPredictResponse)
@@ -485,6 +517,12 @@ def predict_rentals(
     `ortsteil` (see ORTSTEIL_TO_BEZIRK above). Note `condition` uses
     RentalCondition, not Condition -- this model's condition encoder doesn't
     recognise `kernsaniert` (see RentalCondition's docstring).
+
+    Like predict_sales, the response includes `explanation`: how much each
+    field YOU explicitly provided moved the prediction, in EUR (via SHAP --
+    see RentalPricePredictor.explain's docstring in
+    MLlogic_rent/rental_price_predictor.py). `bezirk` never appears there on
+    its own -- its contribution is folded into `ortsteil`'s.
     """
     if rental_predictor is None:
         raise HTTPException(status_code=503, detail="Rental model not loaded.")
@@ -496,6 +534,7 @@ def predict_rentals(
         "condition": condition.value,
         "rooms": rooms,
         "floor": floor,
+        "total_floors": total_floors,
         "energy_class": energy_class.value if energy_class else None,
         "has_lift": has_lift,
         "has_balcony": has_balcony,
@@ -511,17 +550,20 @@ def predict_rentals(
     listing = {k: v for k, v in listing.items() if v is not None}
 
     try:
-        result = rental_predictor.predict(listing)
+        if rental_explainer is not None:
+            predicted_rent_eur, explanation = rental_predictor.explain(listing, rental_explainer)
+        else:
+            predicted_rent_eur = rental_predictor.predict(listing)["predicted_rent_eur"]
+            explanation = None
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
-
-    predicted_rent_eur = result["predicted_rent_eur"]
 
     if listing_rent_eur is None:
         return RentPredictResponse(
             predicted_rent_eur=round(predicted_rent_eur, 2),
             message="if you specify the actual listing rent I can compare it with my "
             "prediction and rate the value of the listing",
+            explanation=explanation,
         )
 
     listing_vs_predicted_pct, message = _comparison(listing_rent_eur, predicted_rent_eur)
@@ -529,4 +571,5 @@ def predict_rentals(
         predicted_rent_eur=round(predicted_rent_eur, 2),
         listing_vs_predicted_pct=listing_vs_predicted_pct,
         message=message,
+        explanation=explanation,
     )
