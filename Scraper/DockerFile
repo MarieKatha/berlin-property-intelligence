@@ -1,0 +1,21 @@
+FROM python:3.12
+
+# Install Firefox and dependencies for Playwright
+RUN apt-get update && apt-get install -y \
+    wget ca-certificates \
+    libgtk-3-0 libgbm1 libxss1 libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python requirements
+COPY Scraper/requirements.txt requirements.txt
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Playwright Firefox browser
+RUN playwright install firefox
+
+# Copy scraper code
+COPY Scraper Scraper
+
+# Run FastAPI scraper service
+CMD uvicorn Scraper.api:app --host 0.0.0.0 --port $PORT
