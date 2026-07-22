@@ -196,8 +196,7 @@ class IS24Scraper:
     async def scrape(self, url: str) -> Optional[dict]:
         """Scrape property features from ImmobilienScout24"""
         async with async_playwright() as p:
-            # Use Firefox instead of Chromium - more stable on macOS
-            browser = await p.firefox.launch(
+            browser = await p.chromium.launch(
                 headless=self.headless,
             )
 
@@ -206,6 +205,10 @@ class IS24Scraper:
                 user_agent=random.choice(self.user_agents),
                 locale='de-DE',
                 timezone_id='Europe/Berlin',
+                # Corporate proxies (e.g. Zscaler) re-sign HTTPS with their own
+                # root CA, which Chromium doesn't trust -- ignore just the TLS
+                # validation, not a statement about the target site's own cert.
+                ignore_https_errors=True,
                 extra_http_headers={
                     'Accept-Language': 'de-DE,de;q=0.9,en;q=0.8',
                     'DNT': '1',
