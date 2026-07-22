@@ -57,9 +57,9 @@ def scrape_is24_listing(url: str) -> str:
     """
     try:
         scraper_url = os.getenv("SCRAPER_URL", "http://localhost:8000")
-        response = requests.get(
+        response = requests.post(
             f"{scraper_url}/scrape",
-            params={"url": url},
+            json={"url": url},
             timeout=120.0,  # Scraping can take up to 60 seconds
         )
         response.raise_for_status()
