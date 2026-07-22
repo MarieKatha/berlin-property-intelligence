@@ -13,9 +13,9 @@ AGENT_API_URL = os.getenv("AGENT_API_URL", "http://127.0.0.1:8002/chat")
 
 st.title("Berlin Property Agent")
 st.caption(
-    "Chat mit dem Property-Agent — kann Datum/Zeit nennen (get_now), "
-    "Passwörter generieren (generate_password) und Verkaufspreise "
-    "schätzen (predict_price)."
+    "Chat with the Property Agent — it can tell the current date/time, "
+    "look up coordinates for an address, and estimate sale, "
+    "new-construction, and rental prices for Berlin apartments."
 )
 
 if "thread_id" not in st.session_state:
@@ -27,7 +27,7 @@ for role, content in st.session_state.messages:
     with st.chat_message(role):
         st.markdown(content)
 
-if prompt := st.chat_input("Deine Nachricht..."):
+if prompt := st.chat_input("Your message..."):
     st.session_state.messages.append(("user", prompt))
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -42,7 +42,7 @@ if prompt := st.chat_input("Deine Nachricht..."):
             response.raise_for_status()
             reply = response.json()["reply"]
         except requests.exceptions.RequestException as e:
-            reply = f"Konnte den Agent nicht erreichen ({e}). Läuft die Agent-API auf {AGENT_API_URL}?"
+            reply = f"Could not reach the agent ({e}). Is the agent API running at {AGENT_API_URL}?"
         st.markdown(reply)
 
     st.session_state.messages.append(("assistant", reply))

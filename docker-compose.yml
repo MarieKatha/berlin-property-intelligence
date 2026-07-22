@@ -7,6 +7,15 @@ services:
       - PORT=8001
     ports:
       - "8001:8001"
+    healthcheck:
+      # Plain TCP connect via the stdlib (no curl/wget in python:3.12) -- by
+      # the time uvicorn binds this port, api/fast.py's module-level model
+      # loading has already finished, so a successful connect is enough.
+      test: ["CMD-SHELL", "python -c 'import os,socket; socket.create_connection((\"localhost\", int(os.environ[\"PORT\"])), timeout=3)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   agent:
     build:
@@ -23,7 +32,14 @@ services:
     ports:
       - "8002:8002"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import os,socket; socket.create_connection((\"localhost\", int(os.environ[\"PORT\"])), timeout=3)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   streamlit:
     build:
@@ -35,4 +51,11 @@ services:
     ports:
       - "8501:8501"
     depends_on:
-      - agent
+      agent:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import os,socket; socket.create_connection((\"localhost\", int(os.environ[\"PORT\"])), timeout=3)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
