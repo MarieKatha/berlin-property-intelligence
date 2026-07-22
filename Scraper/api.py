@@ -17,14 +17,6 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-# Import scraper function (handle both relative and absolute imports)
-try:
-    from scraper import scrape_listing
-except ImportError:
-    # Fallback: adjust path if running from parent directory
-    sys.path.insert(0, str(Path(__file__).parent))
-    from scraper import scrape_listing
-
 # Configure logging to stdout (Docker-friendly)
 logging.basicConfig(
     level=logging.INFO,
@@ -144,9 +136,3 @@ async def scrape(
 
     logger.info(f"Successfully scraped {url}")
     return response
-
-
-@app.get("/health")
-def health() -> dict:
-    """Health check endpoint for container orchestration."""
-    return {"status": "ok", "service": "berlin-property-scraper"}
