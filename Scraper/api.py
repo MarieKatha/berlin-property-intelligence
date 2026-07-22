@@ -12,10 +12,17 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+
+# Only immobilienscout24.de -- the scraper's extraction logic is built
+# specifically around that site's markup and would just return empty
+# fields for anything else. Rejecting other hosts up front also keeps this
+# endpoint from being usable as an open SSRF-style URL fetcher once public.
+ALLOWED_HOSTS = {"www.immobilienscout24.de", "immobilienscout24.de"}
 
 # Configure logging to stdout (Docker-friendly)
 logging.basicConfig(
@@ -89,9 +96,16 @@ async def scrape(
     """
     logger.info(f"Scraping request for URL: {url}")
 
+    hostname = urlparse(url).hostname or ""
+    if hostname not in ALLOWED_HOSTS:
+        raise HTTPException(
+            status_code=422,
+            detail="Only immobilienscout24.de listing URLs are supported.",
+        )
+
     try:
         # Import here to avoid circular imports and get fresh instance
-        from scraper import IS24Scraper
+        from .scraper import IS24Scraper
 
         # Create scraper with headless=True to prevent browser window
         scraper = IS24Scraper(headless=True, timeout=60000)

@@ -11,6 +11,7 @@ from tools import (
     predict_construction_price,
     predict_rentals_price,
     get_lat_lon_osm,
+    scrape_property_listing,
 )
 
 # Basic agent setup
@@ -28,7 +29,8 @@ tools = [
         get_lat_lon_osm,
         predict_sales_price,
         predict_construction_price,
-        predict_rentals_price
+        predict_rentals_price,
+        scrape_property_listing
 ]
 
 system_prompt = """
@@ -38,8 +40,20 @@ system_prompt = """
     your available tools to answer questions directly without asking for
     permission first. Never ask the user if you should use a tool — just
     use it.
-    Available tools: get_now, get_lat_lon_osm,
+    Available tools: get_now, get_lat_lon_osm, scrape_property_listing,
     predict_sales_price, predict_construction_price, predict_rentals_price
+
+    If the user gives you an ImmobilienScout24 (immobilienscout24.de) listing
+    URL, call scrape_property_listing on it first instead of asking them to
+    type out every field by hand. Its fields come back as raw scraped text
+    (e.g. condition "Renoviert", energy_class "A+", has_lift "Ja"/"Nein") --
+    translate these into the exact values the matching predict_* tool below
+    expects, the same way you'd translate the user's own words. If a
+    required field wasn't found on the page, ask the user for just that
+    field instead of the whole set. A scraped listing that has a
+    `condition` field is a resale/secondary-market apartment -- use
+    predict_sales_price for it, never predict_construction_price (new-build
+    listings don't have a condition at all).
 
     predict_sales_price (resale/secondary-market apartments),
     predict_construction_price (new-construction apartments -- no condition

@@ -13,9 +13,8 @@ AGENT_API_URL = os.getenv("AGENT_API_URL", "http://127.0.0.1:8002/chat")
 
 st.title("Berlin Property Agent")
 st.caption(
-    "Chat with the Property Agent — it can tell the current date/time, "
-    "look up coordinates for an address, and estimate sale, "
-    "new-construction, and rental prices for Berlin apartments."
+    "talk to the agent to get an estimate for sale, new-construction, "
+    "and rental prices for Berlin apartments"
 )
 
 if "thread_id" not in st.session_state:

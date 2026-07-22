@@ -37,68 +37,40 @@ if __name__ == "__main__":
     print(f"Lat: {lat}, Lon: {lon}")
 
 
-@tool(parse_docstring=True)
-def scrape_is24_listing(url: str) -> str:
+@tool
+def scrape_property_listing(url: str) -> str:
     """
-    Scrapes a single ImmobilienScout24 (IS24) listing and extracts structured
-    data including area, rooms, condition, energy class, location (ortsteil),
-    and other features. The scraped data can then be used with the prediction
-    tools (predict_sales_price, predict_rentals_price, etc.) to estimate
-    market value and identify good deals.
-
-    Args:
-        url: Full ImmobilienScout24 listing URL, e.g.
-            "https://www.immobilienscout24.de/expose/123456"
-
-    Returns:
-        A formatted string with the scraped listing details (title, address,
-        area, rooms, condition, energy class, etc.). If scraping fails,
-        returns a tool error message.
+    Scrapes a Berlin property listing from an ImmobilienScout24
+    (immobilienscout24.de) URL and returns its structured fields (ortsteil,
+    area_m2, rooms, condition, energy_class, has_lift, has_balcony,
+    furnished, floor, building_era, ...), so they can be used to call
+    predict_sales_price, predict_construction_price, or
+    predict_rentals_price without the user having to type everything out
+    manually. Fields come back as raw scraped text -- e.g. condition might
+    be "Renoviert", energy_class "A+", has_lift "Ja"/"Nein" -- translate
+    these into the exact values the predict_* tools expect before calling
+    them. A field that's missing from the result wasn't found on the page;
+    ask the user for it if the relevant predict_* tool requires it.
     """
     try:
-        scraper_url = os.getenv("SCRAPER_URL", "http://localhost:8000")
-        response = requests.post(
-            f"{scraper_url}/scrape",
-            json={"url": url},
-            timeout=120.0,  # Scraping can take up to 60 seconds
-        )
+        scraper_url = os.getenv("SCRAPER_API_URL", "http://localhost:8003")
+        response = requests.get(f"{scraper_url}/scrape", params={"url": url}, timeout=90)
         response.raise_for_status()
         result = response.json()
-
-        # Format the scraped data nicely for the agent
-        lines = [
-            f"✅ Successfully scraped listing",
-            f"Title: {result.get('title', 'N/A')}",
-            f"Address: {result.get('address', 'N/A')}",
-            f"Ortsteil (District): {result.get('ortsteil', 'N/A')}",
-            f"Bezirk: {result.get('bezirk', 'N/A')}",
-            f"Area: {result.get('area_m2', 'N/A')} m²",
-            f"Rooms: {result.get('rooms', 'N/A')}",
-            f"Energy Class: {result.get('energy_class', 'N/A')}",
-            f"Has Lift: {result.get('has_lift', 'N/A')}",
-            f"URL: {result.get('url', url)}",
-        ]
-        return "\n".join(lines)
-
+        # raw_data has the complete set the scraper extracted (condition,
+        # floor, building_era, has_balcony, furnished, ...) -- the top-level
+        # fields on the response are only a partial subset of it.
+        data = result.get("raw_data") or {k: v for k, v in result.items() if k != "raw_data"}
+        fields = {k: v for k, v in data.items() if v not in (None, "")}
+        return f"Scraped listing at {url}: {fields}"
     except requests.exceptions.Timeout:
-        return (
-            "Tool error: the scraper took too long to respond (page may be slow). "
-            "Try again in a moment or use a different listing URL."
-        )
+        return "Tool error: scraping this listing took too long. Try again in a moment."
     except requests.exceptions.HTTPError as e:
         try:
             detail = e.response.json().get("detail", e.response.text)
         except ValueError:
             detail = e.response.text
-        return (
-            f"Tool error: the scraper API returned an error ({detail}). "
-            "Make sure the URL is a valid ImmobilienScout24 listing and try again."
-        )
-    except requests.exceptions.ConnectionError:
-        return (
-            "Tool error: cannot connect to the scraper service. "
-            "Make sure the scraper service is running and accessible."
-        )
+        return f"Tool error: could not scrape this listing ({detail})."
     except Exception as e:
         return f"Tool error: Please check your input and try again. ({e})"
 
