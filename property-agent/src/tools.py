@@ -74,6 +74,7 @@ def scrape_property_listing(url: str) -> str:
     except Exception as e:
         return f"Tool error: Please check your input and try again. ({e})"
 
+
 @tool(parse_docstring=True)
 def predict_sales_price(
     ortsteil: str,
