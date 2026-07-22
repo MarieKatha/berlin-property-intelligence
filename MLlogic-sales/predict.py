@@ -239,10 +239,13 @@ def explain_prediction(listing: dict, bundle: dict, explainer) -> tuple[float, l
     explanations = []
     for field, value in listing.items():
         if field == "position":
+            # A recognized model input -- included even if this resolves to
+            # zero columns, so it'd be an explicit 0.0 impact rather than
+            # silently missing from the response.
             feature_cols = [c for c in columns if c.startswith("position_")]
+        elif field in _FIELD_TO_FEATURE_COLUMNS:
+            feature_cols = _FIELD_TO_FEATURE_COLUMNS[field]
         else:
-            feature_cols = _FIELD_TO_FEATURE_COLUMNS.get(field)
-        if not feature_cols:
             continue  # not a model input this function knows how to attribute
         field_shap = sum(shap_row[col_index[c]] for c in feature_cols if c in col_index)
         counterfactual_price = float(np.expm1(log_pred - field_shap))
